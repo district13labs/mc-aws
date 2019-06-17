@@ -1,0 +1,185 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: 'Minecraft server spot fleet template' 
+
+Mappings:
+  RegionMap:
+    eu-central-1:
+      HVM64: 'ami-0cfbf4f6db41068ac'
+    us-east-1: 
+      HVM64: 'ami-0de53d8956e8dcf80'
+  KeyNamePerRegion:
+    eu-central-1: 
+      key: 'id_rsa'
+    us-east-1:
+      key: 'id_rsa'
+
+Parameters:
+  InstanceTypeParameter:
+    Type: String
+    Default: c5d.large
+    AllowedValues:
+      - t3.large
+      - c5d.large
+    Description: Enter an instance type, t3.large or c5d.large
+
+Resources:
+  MCSpotFleetRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "spotfleet.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Path: "/saxum-service-role/spotfleet.amazonaws.com/"
+
+  MCSpotFleetRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: "MCSpotFleetRolePolicy"
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Action: 
+              - "ec2:DescribeImages"
+              - "ec2:DescribeSubnets"
+              - "ec2:RequestSpotInstances"
+              - "ec2:DescribeInstanceStatus"
+              - "ec2:RunInstances"
+            Resource: "*"
+          - 
+            Effect: "Allow"
+            Action:
+              - "iam:PassRole"
+            Resource: "*"
+            Condition:
+              StringEquals:
+                iam:PassedToService:
+                  - "ec2.amazonaws.com"
+                  - "ec2.amazonaws.com.cn"
+          - 
+            Effect: "Allow"
+            Action:
+              - "ec2:CreateTags"
+            Resource:
+              - "arn:aws:ec2:*:*:instance/*"
+              - "arn:aws:ec2:*:*:spot-instances-request/*"
+          - 
+            Effect: "Allow"
+            Action:
+              - "ec2:TerminateInstances"
+            Resource: "*"
+            Condition:
+              StringLike:
+                ec2:ResourceTag/aws:ec2spot:fleet-request-id: "*"
+      Roles: 
+        - 
+          Ref: "MCSpotFleetRole"
+  
+  MCEC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties: 
+      Path: "/"
+      Roles: 
+        - 
+          Ref: "MCEC2InstanceRole"
+  MCEC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "ec2.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Path: "/saxum-service-role/ec2.amazonaws.com/"
+  MCEC2InstanceRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: "MCSpotFleetRolePolicy"
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Action: 
+              - "s3:*"
+            Resource: "*"
+      Roles: 
+        - 
+          Ref: "MCEC2InstanceRole"
+    
+  MCServerSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group for minecraft server. Open port 22 and 25565."
+      GroupName: "MCServerSecGroup"
+      SecurityGroupEgress: 
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 25565
+          ToPort: 25565
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 25565
+          ToPort: 25565
+          CidrIp: 0.0.0.0/0
+      VpcId:
+        Ref: MCVPC
+  MCVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: 'false'
+      EnableDnsHostnames: 'false'
+
+  MCSpotRequest:
+    Type: AWS::EC2::SpotFleet
+    Properties:
+      SpotFleetRequestConfigData:
+        IamFleetRole: 
+          Fn::GetAtt: [MCSpotFleetRole, Arn]
+        SpotPrice: '0.065'
+        TargetCapacity: 1
+        AllocationStrategy: "lowestPrice"
+        LaunchSpecifications:
+          -
+            EbsOptimized: true
+            IamInstanceProfile:
+              Arn:
+                Fn::GetAtt: [MCEC2InstanceProfile, Arn]
+            ImageId:
+              Fn::FindInMap: 
+                - RegionMap
+                - Ref: AWS::Region
+                - HVM64
+            InstanceType:
+              Ref: InstanceTypeParameter
+            KeyName: 
+              Fn::FindInMap:
+                - KeyNamePerRegion
+                - Ref: AWS::Region
+                - key
+            SecurityGroups:
+              - GroupId:
+                  Fn::GetAtt: [MCServerSecGroup, GroupId]
+            UserData: "IyEvYmluL2Jhc2gKCnl1bSB1cGRhdGUgLXkKeXVtIGluc3RhbGwgamF2YS0xLjguMC1vcGVuamRrKiAteQoKbG4gLXMgL3Vzci9saWIvanZtL2phdmEtMS44LjAvYmluL2phdmEgL3Vzci9iaW4vamF2YTgKCm1rZGlyIC1wIC9ob21lL2VjMi11c2VyL21pbmVjcmFmdC1zZXJ2ZXIgJiYgY2QgJF8KCmF3cyBzMyBjcCAtLXJlY3Vyc2l2ZSBzMzovL3NheHVtLXZlcm1lcy9taW5lY3JhZnQtc2VydmVyL21jLXNlcnZlci1jb21wb25lbnRzIC4vCmN1cmwgLUxTcyAtTyBodHRwczovL2xhdW5jaGVyLm1vamFuZy5jb20vdjEvb2JqZWN0cy84MDhiZTM4NjllMmNhNmI2MjM3OGY5ZjRiMzNjOTQ2NjIxNjIwMDE5L3NlcnZlci5qYXIKCmNob3duIC1SIGVjMi11c2VyOmVjMi11c2VyIC9ob21lL2VjMi11c2VyCgp0b3VjaCAvdXNyL2xvY2FsL2Jpbi9tYy1zdGFydAplY2hvIC1lICcjIS9iaW4vc2hcbmNkICR7MTotL2hvbWUvZWMyLXVzZXIvbWluZWNyYWZ0LXNlcnZlcn1cbmphdmE4IC1zZXJ2ZXIgLVhteDNHIC1YbXMxRyAtWFg6K1VzZUNvbmNNYXJrU3dlZXBHQyAtWFg6K1VzZVBhck5ld0dDIC1YWDorQ01TSW5jcmVtZW50YWxQYWNpbmcgLVhYOlBhcmFsbGVsR0NUaHJlYWRzPTIgLVhYOitBZ2dyZXNzaXZlT3B0cyAtamFyIHNlcnZlci5qYXIgbm9ndWknID4+IC91c3IvbG9jYWwvYmluL21jLXN0YXJ0CmNobW9kICt4IC91c3IvbG9jYWwvYmluL21jLXN0YXJ0Cg=="
