@@ -36,7 +36,7 @@ Resources:
                 - "spotfleet.amazonaws.com"
             Action: 
               - "sts:AssumeRole"
-      Path: "/saxum-service-role/spotfleet.amazonaws.com/"
+      Path: "/service-roles/spotfleet.amazonaws.com/"
 
   MCSpotFleetRolePolicy:
     Type: AWS::IAM::Policy
@@ -103,7 +103,7 @@ Resources:
                 - "ec2.amazonaws.com"
             Action: 
               - "sts:AssumeRole"
-      Path: "/saxum-service-role/ec2.amazonaws.com/"
+      Path: "/service-roles/ec2.amazonaws.com/"
   MCEC2InstanceRolePolicy:
     Type: AWS::IAM::Policy
     Properties:
@@ -125,15 +125,6 @@ Resources:
     Properties:
       GroupDescription: "Security group for minecraft server. Open port 22 and 25565."
       GroupName: "MCServerSecGroup"
-      SecurityGroupEgress: 
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 25565
-          ToPort: 25565
-          CidrIp: 0.0.0.0/0
       SecurityGroupIngress: 
         - IpProtocol: tcp
           FromPort: 22
@@ -151,6 +142,13 @@ Resources:
       CidrBlock: 10.0.0.0/16
       EnableDnsSupport: 'false'
       EnableDnsHostnames: 'false'
+  MCPublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties: 
+      CidrBlock: 10.0.0.0/24
+      MapPublicIpOnLaunch: true
+      VpcId:
+        Ref: MCVPC
 
   MCSpotRequest:
     Type: AWS::EC2::SpotFleet
@@ -182,4 +180,6 @@ Resources:
             SecurityGroups:
               - GroupId:
                   Fn::GetAtt: [MCServerSecGroup, GroupId]
-            UserData: "IyEvYmluL2Jhc2gKCnl1bSB1cGRhdGUgLXkKeXVtIGluc3RhbGwgamF2YS0xLjguMC1vcGVuamRrKiAteQoKbG4gLXMgL3Vzci9saWIvanZtL2phdmEtMS44LjAvYmluL2phdmEgL3Vzci9iaW4vamF2YTgKCm1rZGlyIC1wIC9ob21lL2VjMi11c2VyL21pbmVjcmFmdC1zZXJ2ZXIgJiYgY2QgJF8KCmF3cyBzMyBjcCAtLXJlY3Vyc2l2ZSBzMzovL3NheHVtLXZlcm1lcy9taW5lY3JhZnQtc2VydmVyL21jLXNlcnZlci1jb21wb25lbnRzIC4vCmN1cmwgLUxTcyAtTyBodHRwczovL2xhdW5jaGVyLm1vamFuZy5jb20vdjEvb2JqZWN0cy84MDhiZTM4NjllMmNhNmI2MjM3OGY5ZjRiMzNjOTQ2NjIxNjIwMDE5L3NlcnZlci5qYXIKCmNob3duIC1SIGVjMi11c2VyOmVjMi11c2VyIC9ob21lL2VjMi11c2VyCgp0b3VjaCAvdXNyL2xvY2FsL2Jpbi9tYy1zdGFydAplY2hvIC1lICcjIS9iaW4vc2hcbmNkICR7MTotL2hvbWUvZWMyLXVzZXIvbWluZWNyYWZ0LXNlcnZlcn1cbmphdmE4IC1zZXJ2ZXIgLVhteDNHIC1YbXMxRyAtWFg6K1VzZUNvbmNNYXJrU3dlZXBHQyAtWFg6K1VzZVBhck5ld0dDIC1YWDorQ01TSW5jcmVtZW50YWxQYWNpbmcgLVhYOlBhcmFsbGVsR0NUaHJlYWRzPTIgLVhYOitBZ2dyZXNzaXZlT3B0cyAtamFyIHNlcnZlci5qYXIgbm9ndWknID4+IC91c3IvbG9jYWwvYmluL21jLXN0YXJ0CmNobW9kICt4IC91c3IvbG9jYWwvYmluL21jLXN0YXJ0Cg=="
+            SubnetId:
+              Ref: MCPublicSubnet
+            UserData: "{user_data}"
